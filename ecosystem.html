@@ -201,45 +201,45 @@
     const statsEl = document.getElementById('stats');
 
     const defaults = {
-      planktonSpawnRate: 60,
+      planktonSpawnRate: 200,
       planktonCap: 900,
       smallFishCount: 70,
-      largeFishCount: 12,
-      smallFishMetabolism: 5,
-      largeFishMetabolism: 6,
+      largeFishCount: 10,
+      smallFishMetabolism: 3,
+      largeFishMetabolism: 40,
       smallFishMaxSpeed: 56,
       largeFishMaxSpeed: 50,
-      schoolRadius: 50,
-      schoolStrength: 0.7,
+      schoolRadius: 98,
+      schoolStrength: 0.4,
       smallFishMinDistance: 7,
-      smallReproThreshold: 17,
-      largeReproThreshold: 7,
+      smallReproThreshold: 5,
+      largeReproThreshold: 17,
       predatorSpeedBoost: 1.6,
-      smallVisionRange: 140,
-      largeVisionRange: 190,
-      simulationSpeed: 1,
+      smallVisionRange: 230,
+      largeVisionRange: 170,
+      simulationSpeed: 4,
     };
 
     const params = { ...defaults };
 
     const controlDefs = [
-      ['planktonSpawnRate', 'Plankton spawn / min', 0, 200, 1, 'How many new plankton are generated per simulated minute. 0 means no new plankton.'],
-      ['planktonCap', 'Plankton cap', 120, 1600, 20, 'Maximum number of plankton allowed at once. Spawning pauses at this cap.'],
-      ['smallFishCount', 'Initial small fish', 20, 220, 1, 'Number of small fish created when the simulation is reset.'],
-      ['largeFishCount', 'Initial large fish', 2, 50, 1, 'Number of large fish created when the simulation is reset.'],
-      ['smallFishMetabolism', 'Small fish energy drain / min', 1, 18, 1, 'Energy each small fish loses per simulated minute. Higher values increase starvation risk.'],
-      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 40, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
-      ['smallFishMaxSpeed', 'Small fish max speed', 20, 120, 1, 'Maximum swim speed for small fish. Higher values improve escape and food interception.'],
-      ['largeFishMaxSpeed', 'Large fish max speed', 20, 120, 1, 'Maximum swim speed for large fish. Higher values improve predator chase performance.'],
-      ['schoolRadius', 'Schooling radius', 20, 110, 1, 'Distance in which small fish react to nearby schoolmates for grouping behavior.'],
-      ['schoolStrength', 'Schooling strength', 0, 2, 0.05, 'How strongly small fish align and cohere with neighbors inside the schooling radius.'],
-      ['smallFishMinDistance', 'Small fish min distance', 0, 20, 1, 'Preferred personal space between small fish. Higher values increase separation to reduce crowding and overlap.'],
-      ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1, 'Plankton meals a small fish must consume before reproducing.'],
-      ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1, 'Small-fish meals a large fish must consume before reproducing.'],
-      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05, 'Controls how aggressively large fish commit to a chase. It multiplies pursuit steering and direct acceleration toward visible prey: low values make predators track loosely and miss more often, high values produce sharper turns, harder acceleration, and faster interceptions.'],
-      ['smallVisionRange', 'Small fish vision range', 40, 320, 5, 'How far small fish can detect plankton and nearby predators.'],
-      ['largeVisionRange', 'Large fish vision range', 50, 420, 5, 'How far large fish can detect small-fish prey.'],
-      ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05, 'Global time multiplier for the simulation update loop.'],
+      ['planktonSpawnRate', 'Plankton spawn / min', 0, 400, 1, 'How many new plankton are generated per simulated minute. 0 means no new plankton.'],
+      ['planktonCap', 'Plankton cap', 0, 1800, 20, 'Maximum number of plankton allowed at once. Spawning pauses at this cap.'],
+      ['smallFishCount', 'Initial small fish', 0, 140, 1, 'Number of small fish created when the simulation is reset.'],
+      ['largeFishCount', 'Initial large fish', 0, 20, 1, 'Number of large fish created when the simulation is reset.'],
+      ['smallFishMetabolism', 'Small fish energy drain / min', 0, 6, 1, 'Energy each small fish loses per simulated minute. Higher values increase starvation risk.'],
+      ['largeFishMetabolism', 'Large fish energy drain / min', 0, 80, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
+      ['smallFishMaxSpeed', 'Small fish max speed', 0, 112, 1, 'Maximum swim speed for small fish. Higher values improve escape and food interception.'],
+      ['largeFishMaxSpeed', 'Large fish max speed', 0, 100, 1, 'Maximum swim speed for large fish. Higher values improve predator chase performance.'],
+      ['schoolRadius', 'Schooling radius', 0, 196, 1, 'Distance in which small fish react to nearby schoolmates for grouping behavior.'],
+      ['schoolStrength', 'Schooling strength', 0, 0.8, 0.05, 'How strongly small fish align and cohere with neighbors inside the schooling radius.'],
+      ['smallFishMinDistance', 'Small fish min distance', 0, 14, 1, 'Preferred personal space between small fish. Higher values increase separation to reduce crowding and overlap.'],
+      ['smallReproThreshold', 'Small fish food-to-reproduce', 0, 10, 1, 'Plankton meals a small fish must consume before reproducing.'],
+      ['largeReproThreshold', 'Large fish food-to-reproduce', 0, 34, 1, 'Small-fish meals a large fish must consume before reproducing.'],
+      ['predatorSpeedBoost', 'Predator pursuit boost', 0, 3.2, 0.05, 'Controls how aggressively large fish commit to a chase. It multiplies pursuit steering and direct acceleration toward visible prey: low values make predators track loosely and miss more often, high values produce sharper turns, harder acceleration, and faster interceptions.'],
+      ['smallVisionRange', 'Small fish vision range', 0, 460, 5, 'How far small fish can detect plankton and nearby predators.'],
+      ['largeVisionRange', 'Large fish vision range', 0, 340, 5, 'How far large fish can detect small-fish prey.'],
+      ['simulationSpeed', 'Simulation speed', 0, 8, 0.05, 'Global time multiplier for the simulation update loop.'],
     ];
 
     function buildControls() {
@@ -632,7 +632,7 @@
       if (!state.history.length) return;
 
       const tMax = Math.max(1, state.history[state.history.length - 1].t);
-      const popMax = Math.max(1, ...state.history.map(p => Math.max(p.plankton, p.small, p.large)));
+      const popMax = Math.max(1, ...state.history.map(p => Math.max(p.plankton / 5, p.small, p.large)));
 
       const toX = (t) => x0 + (t / tMax) * w;
       const toY = (v) => y0 + h - (v / popMax) * (h - 24) - 14;
@@ -658,13 +658,13 @@
       ctx.fillText(`${tMax.toFixed(0)}s`, x0 + w - 40, y0 + h - 4);
       ctx.fillText(`${popMax}`, x0 + 5, y0 + 13);
 
-      drawSeries('rgba(130, 255, 190, 0.95)', p => p.plankton);
+      drawSeries('rgba(130, 255, 190, 0.95)', p => p.plankton / 5);
       drawSeries('rgba(255, 222, 110, 0.95)', p => p.small);
       drawSeries('rgba(255, 170, 140, 0.95)', p => p.large);
 
       // legend
       ctx.fillStyle = 'rgba(215, 235, 255, 0.92)';
-      ctx.fillText('Plankton', x0 + 62, y0 + 14);
+      ctx.fillText('Plankton (x0.2)', x0 + 62, y0 + 14);
       ctx.fillText('Small fish', x0 + 142, y0 + 14);
       ctx.fillText('Large fish', x0 + 236, y0 + 14);
       ctx.fillStyle = 'rgba(130, 255, 190, 1)';
