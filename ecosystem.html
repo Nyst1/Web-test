@@ -179,7 +179,7 @@
     const statsEl = document.getElementById('stats');
 
     const defaults = {
-      planktonSpawnRate: 35,
+      planktonSpawnRate: 60,
       planktonCap: 900,
       smallFishCount: 70,
       largeFishCount: 12,
@@ -189,7 +189,7 @@
       schoolStrength: 0.7,
       smallReproThreshold: 17,
       largeReproThreshold: 7,
-      predatorSpeedBoost: 1.25,
+      predatorSpeedBoost: 1.6,
       smallVisionRange: 140,
       largeVisionRange: 190,
       simulationSpeed: 1,
@@ -198,7 +198,7 @@
     const params = { ...defaults };
 
     const controlDefs = [
-      ['planktonSpawnRate', 'Plankton spawn / sec', 5, 120, 1],
+      ['planktonSpawnRate', 'Plankton spawn / min', 0, 200, 1],
       ['planktonCap', 'Plankton cap', 120, 1600, 20],
       ['smallFishCount', 'Initial small fish', 20, 220, 1],
       ['largeFishCount', 'Initial large fish', 2, 50, 1],
@@ -298,7 +298,7 @@
       constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.size = 1 + rand(2);
+        this.size = 2;
       }
 
       draw() {
@@ -320,18 +320,23 @@
       update(state, dt) {
         const { plankton, largeFish, smallFish, width, height } = state;
 
-        let nearestPredator = null;
-        let nearestPredDist = Infinity;
-        for (const p of largeFish) {
-          const d = distance(this, p);
-          if (d < nearestPredDist) {
-            nearestPredDist = d;
-            nearestPredator = p;
+        // avoid nearby predators with stronger weighted repulsion
+        let fearX = 0;
+        let fearY = 0;
+        let threatCount = 0;
+        for (const predator of largeFish) {
+          const d = distance(this, predator);
+          const avoidRange = Math.max(90, params.smallVisionRange * 0.9);
+          if (d < avoidRange) {
+            const weight = (avoidRange - d) / avoidRange;
+            fearX += (this.x - predator.x) * weight;
+            fearY += (this.y - predator.y) * weight;
+            threatCount++;
           }
         }
 
-        if (nearestPredator && nearestPredDist < 130) {
-          this.steerTo(this.x - (nearestPredator.x - this.x), this.y - (nearestPredator.y - this.y), 0.38);
+        if (threatCount > 0) {
+          this.steerTo(this.x + fearX, this.y + fearY, 0.52);
         } else {
           let nearestPlankton = null;
           let nearestPlanktonDist = Infinity;
@@ -343,7 +348,9 @@
             }
           }
           if (nearestPlankton) {
-            this.steerTo(nearestPlankton.x, nearestPlankton.y, 0.18);
+            // stronger steering when very close so fish can actually intercept food they pass by
+            const urgency = 1 - clamp(nearestPlanktonDist / params.smallVisionRange, 0, 1);
+            this.steerTo(nearestPlankton.x, nearestPlankton.y, 0.16 + urgency * 0.3);
           } else {
             this.vx += (Math.random() - 0.5) * 0.08;
             this.vy += (Math.random() - 0.5) * 0.08;
@@ -421,7 +428,15 @@
         }
 
         if (target) {
-          this.steerTo(target.x, target.y, 0.17 * params.predatorSpeedBoost);
+          const dx = target.x - this.x;
+          const dy = target.y - this.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const urgency = 1 - clamp(d / params.largeVisionRange, 0, 1);
+          const chaseFactor = (0.2 + urgency * 0.36) * params.predatorSpeedBoost;
+          this.steerTo(target.x, target.y, chaseFactor);
+          // direct acceleration to improve interception against fast prey
+          this.vx += (dx / d) * 0.14 * params.predatorSpeedBoost;
+          this.vy += (dy / d) * 0.14 * params.predatorSpeedBoost;
         } else {
           this.vx += (Math.random() - 0.5) * 0.06;
           this.vy += (Math.random() - 0.5) * 0.06;
@@ -499,7 +514,7 @@
       // small fish eat plankton
       for (const fish of state.smallFish) {
         for (let i = state.plankton.length - 1; i >= 0; i--) {
-          if (distance(fish, state.plankton[i]) < 6) {
+          if (distance(fish, state.plankton[i]) < 8) {
             state.plankton.splice(i, 1);
             fish.energy += 7;
             fish.food += 1;
@@ -549,7 +564,7 @@
     }
 
     function spawnPlankton(dt) {
-      state.planktonAccumulator += params.planktonSpawnRate * dt;
+      state.planktonAccumulator += (params.planktonSpawnRate / 60) * dt;
       while (state.planktonAccumulator >= 1 && state.plankton.length < params.planktonCap) {
         state.planktonAccumulator -= 1;
         state.plankton.push(new Plankton(rand(state.width), rand(state.height)));
@@ -616,7 +631,8 @@
         Avg large fish energy: ${avgLargeEnergy}<br>
         Sim time: ${state.time.toFixed(1)}s<br>
         Speed: ${params.simulationSpeed.toFixed(2)}x<br>
-        Vision (small/large): ${Math.round(params.smallVisionRange)} / ${Math.round(params.largeVisionRange)}
+        Vision (small/large): ${Math.round(params.smallVisionRange)} / ${Math.round(params.largeVisionRange)}<br>
+        Plankton spawn: ${Math.round(params.planktonSpawnRate)} / min
       `;
     }
 
