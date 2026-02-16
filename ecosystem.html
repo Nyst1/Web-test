@@ -75,6 +75,28 @@
       font-size: 0.86rem;
     }
 
+    .label-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .info {
+      display: inline-grid;
+      place-items: center;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      border: 1px solid #69b8de;
+      color: #89d9ff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: help;
+      user-select: none;
+      background: rgba(13, 59, 89, 0.45);
+    }
+
     .value {
       color: var(--accent-2);
       font-variant-numeric: tabular-nums;
@@ -185,6 +207,8 @@
       largeFishCount: 12,
       smallFishMetabolism: 5,
       largeFishMetabolism: 6,
+      smallFishMaxSpeed: 56,
+      largeFishMaxSpeed: 50,
       schoolRadius: 50,
       schoolStrength: 0.7,
       smallReproThreshold: 17,
@@ -198,30 +222,32 @@
     const params = { ...defaults };
 
     const controlDefs = [
-      ['planktonSpawnRate', 'Plankton spawn / min', 0, 200, 1],
-      ['planktonCap', 'Plankton cap', 120, 1600, 20],
-      ['smallFishCount', 'Initial small fish', 20, 220, 1],
-      ['largeFishCount', 'Initial large fish', 2, 50, 1],
-      ['smallFishMetabolism', 'Small fish energy drain / min', 1, 18, 1],
-      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 20, 1],
-      ['schoolRadius', 'Schooling radius', 20, 110, 1],
-      ['schoolStrength', 'Schooling strength', 0, 2, 0.05],
-      ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1],
-      ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1],
-      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05],
-      ['smallVisionRange', 'Small fish vision range', 40, 320, 5],
-      ['largeVisionRange', 'Large fish vision range', 50, 420, 5],
-      ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05],
+      ['planktonSpawnRate', 'Plankton spawn / min', 0, 200, 1, 'How many new plankton are generated per simulated minute. 0 means no new plankton.'],
+      ['planktonCap', 'Plankton cap', 120, 1600, 20, 'Maximum number of plankton allowed at once. Spawning pauses at this cap.'],
+      ['smallFishCount', 'Initial small fish', 20, 220, 1, 'Number of small fish created when the simulation is reset.'],
+      ['largeFishCount', 'Initial large fish', 2, 50, 1, 'Number of large fish created when the simulation is reset.'],
+      ['smallFishMetabolism', 'Small fish energy drain / min', 1, 18, 1, 'Energy each small fish loses per simulated minute. Higher values increase starvation risk.'],
+      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 20, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
+      ['smallFishMaxSpeed', 'Small fish max speed', 20, 120, 1, 'Maximum swim speed for small fish. Higher values improve escape and food interception.'],
+      ['largeFishMaxSpeed', 'Large fish max speed', 20, 120, 1, 'Maximum swim speed for large fish. Higher values improve predator chase performance.'],
+      ['schoolRadius', 'Schooling radius', 20, 110, 1, 'Distance in which small fish react to nearby schoolmates for grouping behavior.'],
+      ['schoolStrength', 'Schooling strength', 0, 2, 0.05, 'How strongly small fish align and cohere with neighbors inside the schooling radius.'],
+      ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1, 'Plankton meals a small fish must consume before reproducing.'],
+      ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1, 'Small-fish meals a large fish must consume before reproducing.'],
+      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05, 'Multiplier applied to large fish chase steering and acceleration.'],
+      ['smallVisionRange', 'Small fish vision range', 40, 320, 5, 'How far small fish can detect plankton and nearby predators.'],
+      ['largeVisionRange', 'Large fish vision range', 50, 420, 5, 'How far large fish can detect small-fish prey.'],
+      ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05, 'Global time multiplier for the simulation update loop.'],
     ];
 
     function buildControls() {
       controlsRoot.innerHTML = '';
-      for (const [key, label, min, max, step] of controlDefs) {
+      for (const [key, label, min, max, step, details] of controlDefs) {
         const wrap = document.createElement('div');
         wrap.className = 'control';
 
         const lab = document.createElement('label');
-        lab.innerHTML = `<span>${label}</span><span class="value" id="v-${key}"></span>`;
+        lab.innerHTML = `<span class="label-text">${label}<span class="info" title="${details}" aria-label="${details}">i</span></span><span class="value" id="v-${key}"></span>`;
 
         const input = document.createElement('input');
         input.type = 'range';
@@ -381,6 +407,7 @@
         }
 
         this.energy -= (params.smallFishMetabolism / 60) * dt;
+        this.speed = params.smallFishMaxSpeed;
         this.move(dt, width, height);
       }
 
@@ -443,6 +470,7 @@
         }
 
         this.energy -= (params.largeFishMetabolism / 60) * dt;
+        this.speed = params.largeFishMaxSpeed;
         this.move(dt, width, height);
       }
 
@@ -479,6 +507,7 @@
       paused: false,
       planktonAccumulator: 0,
       bubbles: [],
+      history: [],
     };
 
     function createBubble() {
@@ -498,6 +527,7 @@
       state.time = 0;
       state.planktonAccumulator = 0;
       state.bubbles = Array.from({ length: 36 }, createBubble);
+      state.history = [];
 
       for (let i = 0; i < params.planktonCap * 0.2; i++) {
         state.plankton.push(new Plankton(rand(state.width), rand(state.height)));
@@ -508,6 +538,8 @@
       for (let i = 0; i < params.largeFishCount; i++) {
         state.largeFish.push(new LargeFish(rand(state.width), rand(state.height)));
       }
+
+      recordHistory(true); // ensure time 0 is always present on graph
     }
 
     function consumeInteractions() {
@@ -571,6 +603,78 @@
       }
     }
 
+
+    function recordHistory(force = false) {
+      if (force || state.time - (state.history.at(-1)?.t ?? -Infinity) >= 0.5) {
+        state.history.push({
+          t: state.time,
+          plankton: state.plankton.length,
+          small: state.smallFish.length,
+          large: state.largeFish.length,
+        });
+      }
+    }
+
+    function drawPopulationGraph() {
+      const graphHeight = Math.min(170, Math.max(120, state.height * 0.22));
+      const pad = 10;
+      const x0 = pad;
+      const y0 = state.height - graphHeight - pad;
+      const w = state.width - pad * 2;
+      const h = graphHeight;
+
+      ctx.fillStyle = 'rgba(2, 12, 22, 0.48)';
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = 'rgba(120, 200, 230, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x0, y0, w, h);
+
+      if (!state.history.length) return;
+
+      const tMax = Math.max(1, state.history[state.history.length - 1].t);
+      const popMax = Math.max(1, ...state.history.map(p => Math.max(p.plankton, p.small, p.large)));
+
+      const toX = (t) => x0 + (t / tMax) * w;
+      const toY = (v) => y0 + h - (v / popMax) * (h - 24) - 14;
+
+      const drawSeries = (color, getter) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        for (let i = 0; i < state.history.length; i++) {
+          const p = state.history[i];
+          const x = toX(p.t);
+          const y = toY(getter(p));
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+
+      // axis / ticks with time=0 always visible
+      ctx.fillStyle = 'rgba(210, 235, 255, 0.85)';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('t=0', x0 + 4, y0 + h - 4);
+      ctx.fillText(`${tMax.toFixed(0)}s`, x0 + w - 40, y0 + h - 4);
+      ctx.fillText(`${popMax}`, x0 + 5, y0 + 13);
+
+      drawSeries('rgba(130, 255, 190, 0.95)', p => p.plankton);
+      drawSeries('rgba(105, 210, 255, 0.95)', p => p.small);
+      drawSeries('rgba(255, 170, 140, 0.95)', p => p.large);
+
+      // legend
+      ctx.fillStyle = 'rgba(215, 235, 255, 0.92)';
+      ctx.fillText('Plankton', x0 + 62, y0 + 14);
+      ctx.fillText('Small fish', x0 + 142, y0 + 14);
+      ctx.fillText('Large fish', x0 + 236, y0 + 14);
+      ctx.fillStyle = 'rgba(130, 255, 190, 1)';
+      ctx.fillRect(x0 + 45, y0 + 7, 12, 3);
+      ctx.fillStyle = 'rgba(105, 210, 255, 1)';
+      ctx.fillRect(x0 + 123, y0 + 7, 12, 3);
+      ctx.fillStyle = 'rgba(255, 170, 140, 1)';
+      ctx.fillRect(x0 + 216, y0 + 7, 12, 3);
+    }
+
     function draw() {
       ctx.clearRect(0, 0, state.width, state.height);
 
@@ -611,6 +715,8 @@
       for (const p of state.plankton) p.draw();
       for (const s of state.smallFish) s.draw();
       for (const l of state.largeFish) l.draw();
+
+      drawPopulationGraph();
     }
 
     function updateStats() {
@@ -667,6 +773,7 @@
       consumeInteractions();
       reproduction();
       cullDead();
+      recordHistory();
       draw();
       updateStats();
     }
