@@ -166,6 +166,10 @@
       height: 100%;
       display: block;
       min-height: calc(100vh - 2rem);
+      contain: strict;
+      will-change: transform;
+      transform: translateZ(0);
+      backface-visibility: hidden;
     }
 
     @media (max-width: 960px) {
@@ -196,7 +200,11 @@
 
   <script>
     const canvas = document.getElementById('world');
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true,
+      willReadFrequently: false,
+    });
     const controlsRoot = document.getElementById('controls');
     const statsEl = document.getElementById('stats');
 
@@ -285,6 +293,21 @@
     function clamp(v, min, max) {
       return Math.max(min, Math.min(max, v));
     }
+
+    const SMALL_FISH_PATH = new Path2D();
+    SMALL_FISH_PATH.moveTo(7, 0);
+    SMALL_FISH_PATH.lineTo(-5, -3.8);
+    SMALL_FISH_PATH.lineTo(-2, 0);
+    SMALL_FISH_PATH.lineTo(-5, 3.8);
+    SMALL_FISH_PATH.closePath();
+
+    const LARGE_FISH_PATH = new Path2D();
+    LARGE_FISH_PATH.moveTo(11, 0);
+    LARGE_FISH_PATH.lineTo(-9, -5.5);
+    LARGE_FISH_PATH.lineTo(-3, 0);
+    LARGE_FISH_PATH.lineTo(-9, 5.5);
+    LARGE_FISH_PATH.closePath();
+
 
     class Creature {
       constructor(x, y, speed) {
@@ -435,13 +458,7 @@
         ctx.fillStyle = grad;
         ctx.shadowBlur = 10;
         ctx.shadowColor = 'rgba(255, 222, 110, 0.38)';
-        ctx.beginPath();
-        ctx.moveTo(7, 0);
-        ctx.lineTo(-5, -3.8);
-        ctx.lineTo(-2, 0);
-        ctx.lineTo(-5, 3.8);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fill(SMALL_FISH_PATH);
         ctx.restore();
       }
     }
@@ -498,13 +515,7 @@
         ctx.fillStyle = grad;
         ctx.shadowBlur = 14;
         ctx.shadowColor = 'rgba(255, 150, 125, 0.3)';
-        ctx.beginPath();
-        ctx.moveTo(11, 0);
-        ctx.lineTo(-9, -5.5);
-        ctx.lineTo(-3, 0);
-        ctx.lineTo(-9, 5.5);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fill(LARGE_FISH_PATH);
         ctx.restore();
       }
     }
@@ -519,7 +530,29 @@
       paused: false,
       planktonAccumulator: 0,
       history: [],
+      backgroundLayer: null,
+      backgroundValid: false,
     };
+
+
+    function rebuildBackgroundLayer() {
+      const layer = document.createElement('canvas');
+      layer.width = canvas.width;
+      layer.height = canvas.height;
+      const lctx = layer.getContext('2d', { alpha: false, desynchronized: true });
+      if (!lctx) return;
+
+      lctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+      const surfaceGlow = lctx.createLinearGradient(0, 0, 0, state.height);
+      surfaceGlow.addColorStop(0, 'rgba(35, 119, 174, 0.22)');
+      surfaceGlow.addColorStop(0.4, 'rgba(8, 58, 91, 0.2)');
+      surfaceGlow.addColorStop(1, 'rgba(3, 18, 35, 0.32)');
+      lctx.fillStyle = surfaceGlow;
+      lctx.fillRect(0, 0, state.width, state.height);
+
+      state.backgroundLayer = layer;
+      state.backgroundValid = true;
+    }
 
     function spawnInitial() {
       state.plankton = [];
@@ -678,13 +711,12 @@
     function draw() {
       ctx.clearRect(0, 0, state.width, state.height);
 
-      const surfaceGlow = ctx.createLinearGradient(0, 0, 0, state.height);
-      surfaceGlow.addColorStop(0, 'rgba(35, 119, 174, 0.22)');
-      surfaceGlow.addColorStop(0.4, 'rgba(8, 58, 91, 0.2)');
-      surfaceGlow.addColorStop(1, 'rgba(3, 18, 35, 0.32)');
-      ctx.fillStyle = surfaceGlow;
-      ctx.fillRect(0, 0, state.width, state.height);
-
+      if (!state.backgroundValid || !state.backgroundLayer) {
+        rebuildBackgroundLayer();
+      }
+      if (state.backgroundLayer) {
+        ctx.drawImage(state.backgroundLayer, 0, 0, canvas.width, canvas.height, 0, 0, state.width, state.height);
+      }
 
       for (const p of state.plankton) p.draw();
       for (const s of state.smallFish) s.draw();
@@ -723,6 +755,7 @@
       ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
       state.width = Math.floor(rect.width);
       state.height = Math.floor(rect.height);
+      state.backgroundValid = false;
     }
 
     let last = performance.now();
