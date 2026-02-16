@@ -190,6 +190,8 @@
       smallReproThreshold: 17,
       largeReproThreshold: 7,
       predatorSpeedBoost: 1.25,
+      smallVisionRange: 140,
+      largeVisionRange: 190,
       simulationSpeed: 1,
     };
 
@@ -207,6 +209,8 @@
       ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1],
       ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1],
       ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05],
+      ['smallVisionRange', 'Small fish vision range', 40, 320, 5],
+      ['largeVisionRange', 'Large fish vision range', 50, 420, 5],
       ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05],
     ];
 
@@ -333,13 +337,16 @@
           let nearestPlanktonDist = Infinity;
           for (const p of plankton) {
             const d = distance(this, p);
-            if (d < nearestPlanktonDist) {
+            if (d < params.smallVisionRange && d < nearestPlanktonDist) {
               nearestPlanktonDist = d;
               nearestPlankton = p;
             }
           }
           if (nearestPlankton) {
             this.steerTo(nearestPlankton.x, nearestPlankton.y, 0.18);
+          } else {
+            this.vx += (Math.random() - 0.5) * 0.08;
+            this.vy += (Math.random() - 0.5) * 0.08;
           }
         }
 
@@ -407,7 +414,7 @@
         let minDist = Infinity;
         for (const s of smallFish) {
           const d = distance(this, s);
-          if (d < minDist) {
+          if (d < params.largeVisionRange && d < minDist) {
             minDist = d;
             target = s;
           }
@@ -608,7 +615,8 @@
         Avg small fish energy: ${avgSmallEnergy}<br>
         Avg large fish energy: ${avgLargeEnergy}<br>
         Sim time: ${state.time.toFixed(1)}s<br>
-        Speed: ${params.simulationSpeed.toFixed(2)}x
+        Speed: ${params.simulationSpeed.toFixed(2)}x<br>
+        Vision (small/large): ${Math.round(params.smallVisionRange)} / ${Math.round(params.largeVisionRange)}
       `;
     }
 
