@@ -211,6 +211,7 @@
       largeFishMaxSpeed: 50,
       schoolRadius: 50,
       schoolStrength: 0.7,
+      smallFishMinDistance: 7,
       smallReproThreshold: 17,
       largeReproThreshold: 7,
       predatorSpeedBoost: 1.6,
@@ -227,14 +228,15 @@
       ['smallFishCount', 'Initial small fish', 20, 220, 1, 'Number of small fish created when the simulation is reset.'],
       ['largeFishCount', 'Initial large fish', 2, 50, 1, 'Number of large fish created when the simulation is reset.'],
       ['smallFishMetabolism', 'Small fish energy drain / min', 1, 18, 1, 'Energy each small fish loses per simulated minute. Higher values increase starvation risk.'],
-      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 20, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
+      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 40, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
       ['smallFishMaxSpeed', 'Small fish max speed', 20, 120, 1, 'Maximum swim speed for small fish. Higher values improve escape and food interception.'],
       ['largeFishMaxSpeed', 'Large fish max speed', 20, 120, 1, 'Maximum swim speed for large fish. Higher values improve predator chase performance.'],
       ['schoolRadius', 'Schooling radius', 20, 110, 1, 'Distance in which small fish react to nearby schoolmates for grouping behavior.'],
       ['schoolStrength', 'Schooling strength', 0, 2, 0.05, 'How strongly small fish align and cohere with neighbors inside the schooling radius.'],
+      ['smallFishMinDistance', 'Small fish min distance', 0, 20, 1, 'Preferred personal space between small fish. Higher values increase separation to reduce crowding and overlap.'],
       ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1, 'Plankton meals a small fish must consume before reproducing.'],
       ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1, 'Small-fish meals a large fish must consume before reproducing.'],
-      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05, 'Multiplier applied to large fish chase steering and acceleration.'],
+      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05, 'Controls how aggressively large fish commit to a chase. It multiplies pursuit steering and direct acceleration toward visible prey: low values make predators track loosely and miss more often, high values produce sharper turns, harder acceleration, and faster interceptions.'],
       ['smallVisionRange', 'Small fish vision range', 40, 320, 5, 'How far small fish can detect plankton and nearby predators.'],
       ['largeVisionRange', 'Large fish vision range', 50, 420, 5, 'How far large fish can detect small-fish prey.'],
       ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05, 'Global time multiplier for the simulation update loop.'],
@@ -383,8 +385,9 @@
           }
         }
 
-        // schooling behavior: alignment + cohesion
+        // schooling behavior: alignment + cohesion + configurable separation
         let cx = 0, cy = 0, cvx = 0, cvy = 0, count = 0;
+        let sepX = 0, sepY = 0, sepCount = 0;
         for (const mate of smallFish) {
           if (mate === this) continue;
           const d = distance(this, mate);
@@ -395,6 +398,12 @@
             cvx += mate.vx;
             cvy += mate.vy;
           }
+          if (params.smallFishMinDistance > 0 && d < params.smallFishMinDistance && d > 0.0001) {
+            const force = (params.smallFishMinDistance - d) / params.smallFishMinDistance;
+            sepX += (this.x - mate.x) / d * force;
+            sepY += (this.y - mate.y) / d * force;
+            sepCount++;
+          }
         }
 
         if (count > 0) {
@@ -404,6 +413,9 @@
           this.vx += (cvx - this.vx) * 0.03 * params.schoolStrength;
           this.vy += (cvy - this.vy) * 0.03 * params.schoolStrength;
           this.energy += 0.35 * dt; // safety in numbers bonus
+        }
+        if (sepCount > 0) {
+          this.steerTo(this.x + sepX / sepCount, this.y + sepY / sepCount, 0.3);
         }
 
         this.energy -= (params.smallFishMetabolism / 60) * dt;
@@ -417,12 +429,12 @@
         ctx.translate(this.x, this.y);
         ctx.rotate(angle);
         const grad = ctx.createLinearGradient(-6, -4, 8, 4);
-        grad.addColorStop(0, '#74ebff');
-        grad.addColorStop(0.6, '#3eb9f7');
-        grad.addColorStop(1, '#1b7dc8');
+        grad.addColorStop(0, '#fff49a');
+        grad.addColorStop(0.6, '#ffd95b');
+        grad.addColorStop(1, '#e8b932');
         ctx.fillStyle = grad;
         ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(85, 208, 255, 0.35)';
+        ctx.shadowColor = 'rgba(255, 222, 110, 0.38)';
         ctx.beginPath();
         ctx.moveTo(7, 0);
         ctx.lineTo(-5, -3.8);
@@ -506,19 +518,8 @@
       time: 0,
       paused: false,
       planktonAccumulator: 0,
-      bubbles: [],
       history: [],
     };
-
-    function createBubble() {
-      return {
-        x: rand(state.width),
-        y: state.height + rand(state.height * 0.6),
-        radius: 1.5 + rand(4),
-        speed: 8 + rand(26),
-        wobble: rand(Math.PI * 2),
-      };
-    }
 
     function spawnInitial() {
       state.plankton = [];
@@ -526,7 +527,6 @@
       state.largeFish = [];
       state.time = 0;
       state.planktonAccumulator = 0;
-      state.bubbles = Array.from({ length: 36 }, createBubble);
       state.history = [];
 
       for (let i = 0; i < params.planktonCap * 0.2; i++) {
@@ -659,7 +659,7 @@
       ctx.fillText(`${popMax}`, x0 + 5, y0 + 13);
 
       drawSeries('rgba(130, 255, 190, 0.95)', p => p.plankton);
-      drawSeries('rgba(105, 210, 255, 0.95)', p => p.small);
+      drawSeries('rgba(255, 222, 110, 0.95)', p => p.small);
       drawSeries('rgba(255, 170, 140, 0.95)', p => p.large);
 
       // legend
@@ -669,7 +669,7 @@
       ctx.fillText('Large fish', x0 + 236, y0 + 14);
       ctx.fillStyle = 'rgba(130, 255, 190, 1)';
       ctx.fillRect(x0 + 45, y0 + 7, 12, 3);
-      ctx.fillStyle = 'rgba(105, 210, 255, 1)';
+      ctx.fillStyle = 'rgba(255, 222, 110, 1)';
       ctx.fillRect(x0 + 123, y0 + 7, 12, 3);
       ctx.fillStyle = 'rgba(255, 170, 140, 1)';
       ctx.fillRect(x0 + 216, y0 + 7, 12, 3);
@@ -685,32 +685,6 @@
       ctx.fillStyle = surfaceGlow;
       ctx.fillRect(0, 0, state.width, state.height);
 
-      // moving caustic ribbons
-      ctx.strokeStyle = 'rgba(150, 230, 255, 0.06)';
-      ctx.lineWidth = 2;
-      for (let y = 30; y < state.height; y += 60) {
-        ctx.beginPath();
-        for (let x = 0; x <= state.width; x += 30) {
-          const wave = y + Math.sin((x * 0.03) + (state.time * 1.9) + y * 0.02) * 4;
-          if (x === 0) ctx.moveTo(x, wave);
-          else ctx.lineTo(x, wave);
-        }
-        ctx.stroke();
-      }
-
-      for (const bubble of state.bubbles) {
-        const drift = Math.sin(state.time * 1.2 + bubble.wobble + bubble.y * 0.015) * 0.45;
-        bubble.x += drift;
-        bubble.y -= bubble.speed * 0.016;
-        if (bubble.y < -10) {
-          bubble.x = rand(state.width);
-          bubble.y = state.height + rand(80);
-        }
-        ctx.fillStyle = 'rgba(185, 235, 255, 0.2)';
-        ctx.beginPath();
-        ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
 
       for (const p of state.plankton) p.draw();
       for (const s of state.smallFish) s.draw();
