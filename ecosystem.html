@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fish Ecosystem Simulator</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #04101e;
+      --panel: rgba(5, 20, 36, 0.8);
+      --text: #d7ebff;
+      --accent: #4ec9ff;
+      --accent-2: #7dfac1;
+      --danger: #ff9d8a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 20% 10%, #0b2f4a 0%, var(--bg) 35%, #020812 100%);
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(300px, 360px) 1fr;
+      gap: 1rem;
+      padding: 1rem;
+      transition: grid-template-columns 0.28s ease;
+    }
+
+    body.panel-hidden {
+      grid-template-columns: 1fr;
+    }
+
+    #panel {
+      background: var(--panel);
+      border: 1px solid #1a3a57;
+      border-radius: 12px;
+      padding: 1rem;
+      backdrop-filter: blur(4px);
+      overflow: auto;
+      max-height: calc(100vh - 2rem);
+      box-shadow: 0 14px 50px rgba(3, 15, 25, 0.45);
+    }
+
+    body.panel-hidden #panel {
+      display: none;
+    }
+
+    h1 {
+      margin: 0 0 0.75rem;
+      font-size: 1.3rem;
+      color: var(--accent);
+    }
+
+    p.note {
+      margin-top: 0;
+      font-size: 0.9rem;
+      color: #a8c8dd;
+    }
+
+    .control {
+      margin-bottom: 0.75rem;
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.86rem;
+    }
+
+    .label-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .info {
+      display: inline-grid;
+      place-items: center;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      border: 1px solid #69b8de;
+      color: #89d9ff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: help;
+      user-select: none;
+      background: rgba(13, 59, 89, 0.45);
+    }
+
+    .value {
+      color: var(--accent-2);
+      font-variant-numeric: tabular-nums;
+      min-width: 44px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .stats {
+      margin-top: 0.85rem;
+      padding: 0.65rem;
+      border-radius: 8px;
+      background: rgba(2, 12, 22, 0.75);
+      border: 1px solid #1c3f5e;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.7rem;
+    }
+
+    button {
+      border: 1px solid #2f638f;
+      background: #103356;
+      color: var(--text);
+      border-radius: 7px;
+      padding: 0.45rem 0.65rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover { filter: brightness(1.08); }
+
+    #view {
+      position: relative;
+      min-width: 0;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #1a3a57;
+      background:
+        radial-gradient(45% 30% at 65% 12%, rgba(56, 156, 212, 0.35), transparent 70%),
+        radial-gradient(40% 35% at 22% 18%, rgba(93, 187, 212, 0.28), transparent 72%),
+        linear-gradient(180deg, #113e60 0%, #0a2b46 36%, #05192d 70%, #031220 100%);
+      box-shadow: 0 18px 60px rgba(3, 16, 28, 0.6);
+    }
+
+    #toggle-panel {
+      position: absolute;
+      top: 0.8rem;
+      left: 0.8rem;
+      z-index: 5;
+      border: 1px solid #2f638f;
+      background: rgba(16, 51, 86, 0.82);
+      backdrop-filter: blur(2px);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      min-height: calc(100vh - 2rem);
+    }
+
+    @media (max-width: 960px) {
+      body {
+        grid-template-columns: 1fr;
+      }
+      canvas {
+        min-height: 60vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="panel">
+    <h1>Fish Ecosystem Simulator</h1>
+    <p class="note">Plankton grows continuously. Small fish eat plankton and survive better in schools. Large fish hunt small fish. Reproduction happens after enough food is consumed.</p>
+    <div id="controls"></div>
+    <div class="buttons">
+      <button id="reset">Reset</button>
+      <button id="pause">Pause</button>
+    </div>
+    <div class="stats" id="stats"></div>
+  </section>
+  <section id="view">
+    <button id="toggle-panel">Hide controls</button>
+    <canvas id="world"></canvas>
+  </section>
+
+  <script>
+    const canvas = document.getElementById('world');
+    const ctx = canvas.getContext('2d');
+    const controlsRoot = document.getElementById('controls');
+    const statsEl = document.getElementById('stats');
+
+    const defaults = {
+      planktonSpawnRate: 60,
+      planktonCap: 900,
+      smallFishCount: 70,
+      largeFishCount: 12,
+      smallFishMetabolism: 5,
+      largeFishMetabolism: 6,
+      smallFishMaxSpeed: 56,
+      largeFishMaxSpeed: 50,
+      schoolRadius: 50,
+      schoolStrength: 0.7,
+      smallReproThreshold: 17,
+      largeReproThreshold: 7,
+      predatorSpeedBoost: 1.6,
+      smallVisionRange: 140,
+      largeVisionRange: 190,
+      simulationSpeed: 1,
+    };
+
+    const params = { ...defaults };
+
+    const controlDefs = [
+      ['planktonSpawnRate', 'Plankton spawn / min', 0, 200, 1, 'How many new plankton are generated per simulated minute. 0 means no new plankton.'],
+      ['planktonCap', 'Plankton cap', 120, 1600, 20, 'Maximum number of plankton allowed at once. Spawning pauses at this cap.'],
+      ['smallFishCount', 'Initial small fish', 20, 220, 1, 'Number of small fish created when the simulation is reset.'],
+      ['largeFishCount', 'Initial large fish', 2, 50, 1, 'Number of large fish created when the simulation is reset.'],
+      ['smallFishMetabolism', 'Small fish energy drain / min', 1, 18, 1, 'Energy each small fish loses per simulated minute. Higher values increase starvation risk.'],
+      ['largeFishMetabolism', 'Large fish energy drain / min', 1, 20, 1, 'Energy each large fish loses per simulated minute. Higher values require more hunting success.'],
+      ['smallFishMaxSpeed', 'Small fish max speed', 20, 120, 1, 'Maximum swim speed for small fish. Higher values improve escape and food interception.'],
+      ['largeFishMaxSpeed', 'Large fish max speed', 20, 120, 1, 'Maximum swim speed for large fish. Higher values improve predator chase performance.'],
+      ['schoolRadius', 'Schooling radius', 20, 110, 1, 'Distance in which small fish react to nearby schoolmates for grouping behavior.'],
+      ['schoolStrength', 'Schooling strength', 0, 2, 0.05, 'How strongly small fish align and cohere with neighbors inside the schooling radius.'],
+      ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1, 'Plankton meals a small fish must consume before reproducing.'],
+      ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1, 'Small-fish meals a large fish must consume before reproducing.'],
+      ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05, 'Multiplier applied to large fish chase steering and acceleration.'],
+      ['smallVisionRange', 'Small fish vision range', 40, 320, 5, 'How far small fish can detect plankton and nearby predators.'],
+      ['largeVisionRange', 'Large fish vision range', 50, 420, 5, 'How far large fish can detect small-fish prey.'],
+      ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05, 'Global time multiplier for the simulation update loop.'],
+    ];
+
+    function buildControls() {
+      controlsRoot.innerHTML = '';
+      for (const [key, label, min, max, step, details] of controlDefs) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control';
+
+        const lab = document.createElement('label');
+        lab.innerHTML = `<span class="label-text">${label}<span class="info" title="${details}" aria-label="${details}">i</span></span><span class="value" id="v-${key}"></span>`;
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = min;
+        input.max = max;
+        input.step = step;
+        input.value = params[key];
+        input.addEventListener('input', () => {
+          params[key] = Number(input.value);
+          updateControlValue(key);
+        });
+
+        wrap.append(lab, input);
+        controlsRoot.appendChild(wrap);
+        updateControlValue(key);
+      }
+    }
+
+    function updateControlValue(key) {
+      const el = document.getElementById(`v-${key}`);
+      if (!el) return;
+      el.textContent = Number.isInteger(params[key]) ? params[key] : params[key].toFixed(2);
+    }
+
+    function rand(a = 1) { return Math.random() * a; }
+
+    function distance(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    class Creature {
+      constructor(x, y, speed) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * speed;
+        this.vy = (Math.random() - 0.5) * speed;
+        this.speed = speed;
+      }
+
+      steerTo(tx, ty, factor = 0.05) {
+        const dx = tx - this.x;
+        const dy = ty - this.y;
+        const d = Math.hypot(dx, dy) || 1;
+        this.vx += (dx / d) * factor;
+        this.vy += (dy / d) * factor;
+      }
+
+      move(dt, w, h) {
+        const mag = Math.hypot(this.vx, this.vy) || 1;
+        const cap = this.speed;
+        this.vx = (this.vx / mag) * clamp(mag, 0, cap);
+        this.vy = (this.vy / mag) * clamp(mag, 0, cap);
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+
+        if (this.x < 0 || this.x > w) {
+          this.vx *= -1;
+          this.x = clamp(this.x, 0, w);
+        }
+        if (this.y < 0 || this.y > h) {
+          this.vy *= -1;
+          this.y = clamp(this.y, 0, h);
+        }
+      }
+    }
+
+    class Plankton {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = 2;
+      }
+
+      draw() {
+        const twinkle = 0.6 + 0.4 * Math.sin(state.time * 3 + this.x * 0.03 + this.y * 0.03);
+        ctx.fillStyle = `rgba(120, 255, 180, ${0.55 + twinkle * 0.4})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    class SmallFish extends Creature {
+      constructor(x, y) {
+        super(x, y, 48 + rand(20));
+        this.energy = 30 + rand(20);
+        this.food = 0;
+      }
+
+      update(state, dt) {
+        const { plankton, largeFish, smallFish, width, height } = state;
+
+        // avoid nearby predators with stronger weighted repulsion
+        let fearX = 0;
+        let fearY = 0;
+        let threatCount = 0;
+        for (const predator of largeFish) {
+          const d = distance(this, predator);
+          const avoidRange = Math.max(90, params.smallVisionRange * 0.9);
+          if (d < avoidRange) {
+            const weight = (avoidRange - d) / avoidRange;
+            fearX += (this.x - predator.x) * weight;
+            fearY += (this.y - predator.y) * weight;
+            threatCount++;
+          }
+        }
+
+        if (threatCount > 0) {
+          this.steerTo(this.x + fearX, this.y + fearY, 0.52);
+        } else {
+          let nearestPlankton = null;
+          let nearestPlanktonDist = Infinity;
+          for (const p of plankton) {
+            const d = distance(this, p);
+            if (d < params.smallVisionRange && d < nearestPlanktonDist) {
+              nearestPlanktonDist = d;
+              nearestPlankton = p;
+            }
+          }
+          if (nearestPlankton) {
+            // stronger steering when very close so fish can actually intercept food they pass by
+            const urgency = 1 - clamp(nearestPlanktonDist / params.smallVisionRange, 0, 1);
+            this.steerTo(nearestPlankton.x, nearestPlankton.y, 0.16 + urgency * 0.3);
+          } else {
+            this.vx += (Math.random() - 0.5) * 0.08;
+            this.vy += (Math.random() - 0.5) * 0.08;
+          }
+        }
+
+        // schooling behavior: alignment + cohesion
+        let cx = 0, cy = 0, cvx = 0, cvy = 0, count = 0;
+        for (const mate of smallFish) {
+          if (mate === this) continue;
+          const d = distance(this, mate);
+          if (d < params.schoolRadius) {
+            count++;
+            cx += mate.x;
+            cy += mate.y;
+            cvx += mate.vx;
+            cvy += mate.vy;
+          }
+        }
+
+        if (count > 0) {
+          cx /= count; cy /= count;
+          cvx /= count; cvy /= count;
+          this.steerTo(cx, cy, 0.06 * params.schoolStrength);
+          this.vx += (cvx - this.vx) * 0.03 * params.schoolStrength;
+          this.vy += (cvy - this.vy) * 0.03 * params.schoolStrength;
+          this.energy += 0.35 * dt; // safety in numbers bonus
+        }
+
+        this.energy -= (params.smallFishMetabolism / 60) * dt;
+        this.speed = params.smallFishMaxSpeed;
+        this.move(dt, width, height);
+      }
+
+      draw() {
+        const angle = Math.atan2(this.vy, this.vx);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(angle);
+        const grad = ctx.createLinearGradient(-6, -4, 8, 4);
+        grad.addColorStop(0, '#74ebff');
+        grad.addColorStop(0.6, '#3eb9f7');
+        grad.addColorStop(1, '#1b7dc8');
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(85, 208, 255, 0.35)';
+        ctx.beginPath();
+        ctx.moveTo(7, 0);
+        ctx.lineTo(-5, -3.8);
+        ctx.lineTo(-2, 0);
+        ctx.lineTo(-5, 3.8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    class LargeFish extends Creature {
+      constructor(x, y) {
+        super(x, y, 40 + rand(18));
+        this.energy = 45 + rand(30);
+        this.food = 0;
+      }
+
+      update(state, dt) {
+        const { smallFish, width, height } = state;
+
+        let target = null;
+        let minDist = Infinity;
+        for (const s of smallFish) {
+          const d = distance(this, s);
+          if (d < params.largeVisionRange && d < minDist) {
+            minDist = d;
+            target = s;
+          }
+        }
+
+        if (target) {
+          const dx = target.x - this.x;
+          const dy = target.y - this.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const urgency = 1 - clamp(d / params.largeVisionRange, 0, 1);
+          const chaseFactor = (0.2 + urgency * 0.36) * params.predatorSpeedBoost;
+          this.steerTo(target.x, target.y, chaseFactor);
+          // direct acceleration to improve interception against fast prey
+          this.vx += (dx / d) * 0.14 * params.predatorSpeedBoost;
+          this.vy += (dy / d) * 0.14 * params.predatorSpeedBoost;
+        } else {
+          this.vx += (Math.random() - 0.5) * 0.06;
+          this.vy += (Math.random() - 0.5) * 0.06;
+        }
+
+        this.energy -= (params.largeFishMetabolism / 60) * dt;
+        this.speed = params.largeFishMaxSpeed;
+        this.move(dt, width, height);
+      }
+
+      draw() {
+        const angle = Math.atan2(this.vy, this.vx);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(angle);
+        const grad = ctx.createLinearGradient(-10, -6, 12, 5);
+        grad.addColorStop(0, '#ffc29a');
+        grad.addColorStop(0.55, '#ff9c74');
+        grad.addColorStop(1, '#e76a5a');
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = 'rgba(255, 150, 125, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(11, 0);
+        ctx.lineTo(-9, -5.5);
+        ctx.lineTo(-3, 0);
+        ctx.lineTo(-9, 5.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    const state = {
+      width: 0,
+      height: 0,
+      plankton: [],
+      smallFish: [],
+      largeFish: [],
+      time: 0,
+      paused: false,
+      planktonAccumulator: 0,
+      bubbles: [],
+      history: [],
+    };
+
+    function createBubble() {
+      return {
+        x: rand(state.width),
+        y: state.height + rand(state.height * 0.6),
+        radius: 1.5 + rand(4),
+        speed: 8 + rand(26),
+        wobble: rand(Math.PI * 2),
+      };
+    }
+
+    function spawnInitial() {
+      state.plankton = [];
+      state.smallFish = [];
+      state.largeFish = [];
+      state.time = 0;
+      state.planktonAccumulator = 0;
+      state.bubbles = Array.from({ length: 36 }, createBubble);
+      state.history = [];
+
+      for (let i = 0; i < params.planktonCap * 0.2; i++) {
+        state.plankton.push(new Plankton(rand(state.width), rand(state.height)));
+      }
+      for (let i = 0; i < params.smallFishCount; i++) {
+        state.smallFish.push(new SmallFish(rand(state.width), rand(state.height)));
+      }
+      for (let i = 0; i < params.largeFishCount; i++) {
+        state.largeFish.push(new LargeFish(rand(state.width), rand(state.height)));
+      }
+
+      recordHistory(true); // ensure time 0 is always present on graph
+    }
+
+    function consumeInteractions() {
+      // small fish eat plankton
+      for (const fish of state.smallFish) {
+        for (let i = state.plankton.length - 1; i >= 0; i--) {
+          if (distance(fish, state.plankton[i]) < 8) {
+            state.plankton.splice(i, 1);
+            fish.energy += 7;
+            fish.food += 1;
+            break;
+          }
+        }
+      }
+
+      // large fish eat small fish
+      for (const hunter of state.largeFish) {
+        for (let i = state.smallFish.length - 1; i >= 0; i--) {
+          if (distance(hunter, state.smallFish[i]) < 11) {
+            state.smallFish.splice(i, 1);
+            hunter.energy += 18;
+            hunter.food += 1;
+            break;
+          }
+        }
+      }
+    }
+
+    function reproduction() {
+      const bornSmall = [];
+      for (const fish of state.smallFish) {
+        if (fish.food >= params.smallReproThreshold && fish.energy > 20) {
+          fish.food = 0;
+          fish.energy -= 7;
+          bornSmall.push(new SmallFish(fish.x + rand(10) - 5, fish.y + rand(10) - 5));
+        }
+      }
+      state.smallFish.push(...bornSmall);
+
+      const bornLarge = [];
+      for (const fish of state.largeFish) {
+        if (fish.food >= params.largeReproThreshold && fish.energy > 35) {
+          fish.food = 0;
+          fish.energy -= 12;
+          bornLarge.push(new LargeFish(fish.x + rand(12) - 6, fish.y + rand(12) - 6));
+        }
+      }
+      state.largeFish.push(...bornLarge);
+    }
+
+    function cullDead() {
+      state.smallFish = state.smallFish.filter(f => f.energy > 0);
+      state.largeFish = state.largeFish.filter(f => f.energy > 0);
+    }
+
+    function spawnPlankton(dt) {
+      state.planktonAccumulator += (params.planktonSpawnRate / 60) * dt;
+      while (state.planktonAccumulator >= 1 && state.plankton.length < params.planktonCap) {
+        state.planktonAccumulator -= 1;
+        state.plankton.push(new Plankton(rand(state.width), rand(state.height)));
+      }
+    }
+
+
+    function recordHistory(force = false) {
+      if (force || state.time - (state.history.at(-1)?.t ?? -Infinity) >= 0.5) {
+        state.history.push({
+          t: state.time,
+          plankton: state.plankton.length,
+          small: state.smallFish.length,
+          large: state.largeFish.length,
+        });
+      }
+    }
+
+    function drawPopulationGraph() {
+      const graphHeight = Math.min(170, Math.max(120, state.height * 0.22));
+      const pad = 10;
+      const x0 = pad;
+      const y0 = state.height - graphHeight - pad;
+      const w = state.width - pad * 2;
+      const h = graphHeight;
+
+      ctx.fillStyle = 'rgba(2, 12, 22, 0.48)';
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = 'rgba(120, 200, 230, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x0, y0, w, h);
+
+      if (!state.history.length) return;
+
+      const tMax = Math.max(1, state.history[state.history.length - 1].t);
+      const popMax = Math.max(1, ...state.history.map(p => Math.max(p.plankton, p.small, p.large)));
+
+      const toX = (t) => x0 + (t / tMax) * w;
+      const toY = (v) => y0 + h - (v / popMax) * (h - 24) - 14;
+
+      const drawSeries = (color, getter) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        for (let i = 0; i < state.history.length; i++) {
+          const p = state.history[i];
+          const x = toX(p.t);
+          const y = toY(getter(p));
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      };
+
+      // axis / ticks with time=0 always visible
+      ctx.fillStyle = 'rgba(210, 235, 255, 0.85)';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('t=0', x0 + 4, y0 + h - 4);
+      ctx.fillText(`${tMax.toFixed(0)}s`, x0 + w - 40, y0 + h - 4);
+      ctx.fillText(`${popMax}`, x0 + 5, y0 + 13);
+
+      drawSeries('rgba(130, 255, 190, 0.95)', p => p.plankton);
+      drawSeries('rgba(105, 210, 255, 0.95)', p => p.small);
+      drawSeries('rgba(255, 170, 140, 0.95)', p => p.large);
+
+      // legend
+      ctx.fillStyle = 'rgba(215, 235, 255, 0.92)';
+      ctx.fillText('Plankton', x0 + 62, y0 + 14);
+      ctx.fillText('Small fish', x0 + 142, y0 + 14);
+      ctx.fillText('Large fish', x0 + 236, y0 + 14);
+      ctx.fillStyle = 'rgba(130, 255, 190, 1)';
+      ctx.fillRect(x0 + 45, y0 + 7, 12, 3);
+      ctx.fillStyle = 'rgba(105, 210, 255, 1)';
+      ctx.fillRect(x0 + 123, y0 + 7, 12, 3);
+      ctx.fillStyle = 'rgba(255, 170, 140, 1)';
+      ctx.fillRect(x0 + 216, y0 + 7, 12, 3);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, state.width, state.height);
+
+      const surfaceGlow = ctx.createLinearGradient(0, 0, 0, state.height);
+      surfaceGlow.addColorStop(0, 'rgba(35, 119, 174, 0.22)');
+      surfaceGlow.addColorStop(0.4, 'rgba(8, 58, 91, 0.2)');
+      surfaceGlow.addColorStop(1, 'rgba(3, 18, 35, 0.32)');
+      ctx.fillStyle = surfaceGlow;
+      ctx.fillRect(0, 0, state.width, state.height);
+
+      // moving caustic ribbons
+      ctx.strokeStyle = 'rgba(150, 230, 255, 0.06)';
+      ctx.lineWidth = 2;
+      for (let y = 30; y < state.height; y += 60) {
+        ctx.beginPath();
+        for (let x = 0; x <= state.width; x += 30) {
+          const wave = y + Math.sin((x * 0.03) + (state.time * 1.9) + y * 0.02) * 4;
+          if (x === 0) ctx.moveTo(x, wave);
+          else ctx.lineTo(x, wave);
+        }
+        ctx.stroke();
+      }
+
+      for (const bubble of state.bubbles) {
+        const drift = Math.sin(state.time * 1.2 + bubble.wobble + bubble.y * 0.015) * 0.45;
+        bubble.x += drift;
+        bubble.y -= bubble.speed * 0.016;
+        if (bubble.y < -10) {
+          bubble.x = rand(state.width);
+          bubble.y = state.height + rand(80);
+        }
+        ctx.fillStyle = 'rgba(185, 235, 255, 0.2)';
+        ctx.beginPath();
+        ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const p of state.plankton) p.draw();
+      for (const s of state.smallFish) s.draw();
+      for (const l of state.largeFish) l.draw();
+
+      drawPopulationGraph();
+    }
+
+    function updateStats() {
+      const avgSmallEnergy = state.smallFish.length
+        ? (state.smallFish.reduce((sum, f) => sum + f.energy, 0) / state.smallFish.length).toFixed(1)
+        : '0.0';
+      const avgLargeEnergy = state.largeFish.length
+        ? (state.largeFish.reduce((sum, f) => sum + f.energy, 0) / state.largeFish.length).toFixed(1)
+        : '0.0';
+
+      statsEl.innerHTML = `
+        <strong>Population</strong><br>
+        Plankton: ${state.plankton.length}<br>
+        Small fish: ${state.smallFish.length}<br>
+        Large fish: ${state.largeFish.length}<br><br>
+        <strong>Health</strong><br>
+        Avg small fish energy: ${avgSmallEnergy}<br>
+        Avg large fish energy: ${avgLargeEnergy}<br>
+        Sim time: ${state.time.toFixed(1)}s<br>
+        Speed: ${params.simulationSpeed.toFixed(2)}x<br>
+        Vision (small/large): ${Math.round(params.smallVisionRange)} / ${Math.round(params.largeVisionRange)}<br>
+        Plankton spawn: ${Math.round(params.planktonSpawnRate)} / min
+      `;
+    }
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      state.width = canvas.width = Math.floor(rect.width * window.devicePixelRatio);
+      state.height = canvas.height = Math.floor(rect.height * window.devicePixelRatio);
+      ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+      state.width = Math.floor(rect.width);
+      state.height = Math.floor(rect.height);
+    }
+
+    let last = performance.now();
+    function frame(now) {
+      requestAnimationFrame(frame);
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      if (state.paused) {
+        draw();
+        updateStats();
+        return;
+      }
+
+      const simDt = dt * params.simulationSpeed;
+
+      state.time += simDt;
+      spawnPlankton(simDt);
+
+      for (const fish of state.smallFish) fish.update(state, simDt);
+      for (const fish of state.largeFish) fish.update(state, simDt);
+
+      consumeInteractions();
+      reproduction();
+      cullDead();
+      recordHistory();
+      draw();
+      updateStats();
+    }
+
+    function init() {
+      buildControls();
+      resize();
+      spawnInitial();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('resize', () => {
+      resize();
+      for (const p of state.plankton) {
+        p.x = clamp(p.x, 0, state.width);
+        p.y = clamp(p.y, 0, state.height);
+      }
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      spawnInitial();
+    });
+
+    document.getElementById('pause').addEventListener('click', (e) => {
+      state.paused = !state.paused;
+      e.target.textContent = state.paused ? 'Resume' : 'Pause';
+    });
+
+    document.getElementById('toggle-panel').addEventListener('click', (e) => {
+      document.body.classList.toggle('panel-hidden');
+      const hidden = document.body.classList.contains('panel-hidden');
+      e.target.textContent = hidden ? 'Show controls' : 'Hide controls';
+      setTimeout(resize, 280);
+    });
+
+    init();
+  </script>
+</body>
+</html>
