@@ -8,7 +8,7 @@
     :root {
       color-scheme: dark;
       --bg: #04101e;
-      --panel: rgba(5, 20, 36, 0.88);
+      --panel: rgba(5, 20, 36, 0.8);
       --text: #d7ebff;
       --accent: #4ec9ff;
       --accent-2: #7dfac1;
@@ -27,6 +27,11 @@
       grid-template-columns: minmax(300px, 360px) 1fr;
       gap: 1rem;
       padding: 1rem;
+      transition: grid-template-columns 0.28s ease;
+    }
+
+    body.panel-hidden {
+      grid-template-columns: 1fr;
     }
 
     #panel {
@@ -37,6 +42,11 @@
       backdrop-filter: blur(4px);
       overflow: auto;
       max-height: calc(100vh - 2rem);
+      box-shadow: 0 14px 50px rgba(3, 15, 25, 0.45);
+    }
+
+    body.panel-hidden #panel {
+      display: none;
     }
 
     h1 {
@@ -89,6 +99,7 @@
 
     .buttons {
       display: flex;
+      flex-wrap: wrap;
       gap: 0.5rem;
       margin-top: 0.7rem;
     }
@@ -111,7 +122,21 @@
       border-radius: 12px;
       overflow: hidden;
       border: 1px solid #1a3a57;
-      background: linear-gradient(180deg, #0a2740 0%, #031423 45%, #020f1a 100%);
+      background:
+        radial-gradient(45% 30% at 65% 12%, rgba(56, 156, 212, 0.35), transparent 70%),
+        radial-gradient(40% 35% at 22% 18%, rgba(93, 187, 212, 0.28), transparent 72%),
+        linear-gradient(180deg, #113e60 0%, #0a2b46 36%, #05192d 70%, #031220 100%);
+      box-shadow: 0 18px 60px rgba(3, 16, 28, 0.6);
+    }
+
+    #toggle-panel {
+      position: absolute;
+      top: 0.8rem;
+      left: 0.8rem;
+      z-index: 5;
+      border: 1px solid #2f638f;
+      background: rgba(16, 51, 86, 0.82);
+      backdrop-filter: blur(2px);
     }
 
     canvas {
@@ -142,7 +167,10 @@
     </div>
     <div class="stats" id="stats"></div>
   </section>
-  <section id="view"><canvas id="world"></canvas></section>
+  <section id="view">
+    <button id="toggle-panel">Hide controls</button>
+    <canvas id="world"></canvas>
+  </section>
 
   <script>
     const canvas = document.getElementById('world');
@@ -162,6 +190,7 @@
       smallReproThreshold: 17,
       largeReproThreshold: 7,
       predatorSpeedBoost: 1.25,
+      simulationSpeed: 1,
     };
 
     const params = { ...defaults };
@@ -178,6 +207,7 @@
       ['smallReproThreshold', 'Small fish food-to-reproduce', 5, 40, 1],
       ['largeReproThreshold', 'Large fish food-to-reproduce', 2, 20, 1],
       ['predatorSpeedBoost', 'Predator pursuit boost', 1, 2.5, 0.05],
+      ['simulationSpeed', 'Simulation speed', 0.25, 4, 0.05],
     ];
 
     function buildControls() {
@@ -268,7 +298,8 @@
       }
 
       draw() {
-        ctx.fillStyle = 'rgba(120, 255, 180, 0.9)';
+        const twinkle = 0.6 + 0.4 * Math.sin(state.time * 3 + this.x * 0.03 + this.y * 0.03);
+        ctx.fillStyle = `rgba(120, 255, 180, ${0.55 + twinkle * 0.4})`;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
@@ -344,7 +375,13 @@
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(angle);
-        ctx.fillStyle = '#66d0ff';
+        const grad = ctx.createLinearGradient(-6, -4, 8, 4);
+        grad.addColorStop(0, '#74ebff');
+        grad.addColorStop(0.6, '#3eb9f7');
+        grad.addColorStop(1, '#1b7dc8');
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(85, 208, 255, 0.35)';
         ctx.beginPath();
         ctx.moveTo(7, 0);
         ctx.lineTo(-5, -3.8);
@@ -392,7 +429,13 @@
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(angle);
-        ctx.fillStyle = '#ff977a';
+        const grad = ctx.createLinearGradient(-10, -6, 12, 5);
+        grad.addColorStop(0, '#ffc29a');
+        grad.addColorStop(0.55, '#ff9c74');
+        grad.addColorStop(1, '#e76a5a');
+        ctx.fillStyle = grad;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = 'rgba(255, 150, 125, 0.3)';
         ctx.beginPath();
         ctx.moveTo(11, 0);
         ctx.lineTo(-9, -5.5);
@@ -413,7 +456,18 @@
       time: 0,
       paused: false,
       planktonAccumulator: 0,
+      bubbles: [],
     };
+
+    function createBubble() {
+      return {
+        x: rand(state.width),
+        y: state.height + rand(state.height * 0.6),
+        radius: 1.5 + rand(4),
+        speed: 8 + rand(26),
+        wobble: rand(Math.PI * 2),
+      };
+    }
 
     function spawnInitial() {
       state.plankton = [];
@@ -421,6 +475,7 @@
       state.largeFish = [];
       state.time = 0;
       state.planktonAccumulator = 0;
+      state.bubbles = Array.from({ length: 36 }, createBubble);
 
       for (let i = 0; i < params.planktonCap * 0.2; i++) {
         state.plankton.push(new Plankton(rand(state.width), rand(state.height)));
@@ -497,9 +552,39 @@
     function draw() {
       ctx.clearRect(0, 0, state.width, state.height);
 
-      // subtle plankton glow
-      ctx.fillStyle = 'rgba(5, 45, 70, 0.2)';
+      const surfaceGlow = ctx.createLinearGradient(0, 0, 0, state.height);
+      surfaceGlow.addColorStop(0, 'rgba(35, 119, 174, 0.22)');
+      surfaceGlow.addColorStop(0.4, 'rgba(8, 58, 91, 0.2)');
+      surfaceGlow.addColorStop(1, 'rgba(3, 18, 35, 0.32)');
+      ctx.fillStyle = surfaceGlow;
       ctx.fillRect(0, 0, state.width, state.height);
+
+      // moving caustic ribbons
+      ctx.strokeStyle = 'rgba(150, 230, 255, 0.06)';
+      ctx.lineWidth = 2;
+      for (let y = 30; y < state.height; y += 60) {
+        ctx.beginPath();
+        for (let x = 0; x <= state.width; x += 30) {
+          const wave = y + Math.sin((x * 0.03) + (state.time * 1.9) + y * 0.02) * 4;
+          if (x === 0) ctx.moveTo(x, wave);
+          else ctx.lineTo(x, wave);
+        }
+        ctx.stroke();
+      }
+
+      for (const bubble of state.bubbles) {
+        const drift = Math.sin(state.time * 1.2 + bubble.wobble + bubble.y * 0.015) * 0.45;
+        bubble.x += drift;
+        bubble.y -= bubble.speed * 0.016;
+        if (bubble.y < -10) {
+          bubble.x = rand(state.width);
+          bubble.y = state.height + rand(80);
+        }
+        ctx.fillStyle = 'rgba(185, 235, 255, 0.2)';
+        ctx.beginPath();
+        ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       for (const p of state.plankton) p.draw();
       for (const s of state.smallFish) s.draw();
@@ -522,7 +607,8 @@
         <strong>Health</strong><br>
         Avg small fish energy: ${avgSmallEnergy}<br>
         Avg large fish energy: ${avgLargeEnergy}<br>
-        Sim time: ${state.time.toFixed(1)}s
+        Sim time: ${state.time.toFixed(1)}s<br>
+        Speed: ${params.simulationSpeed.toFixed(2)}x
       `;
     }
 
@@ -546,11 +632,13 @@
         return;
       }
 
-      state.time += dt;
-      spawnPlankton(dt);
+      const simDt = dt * params.simulationSpeed;
 
-      for (const fish of state.smallFish) fish.update(state, dt);
-      for (const fish of state.largeFish) fish.update(state, dt);
+      state.time += simDt;
+      spawnPlankton(simDt);
+
+      for (const fish of state.smallFish) fish.update(state, simDt);
+      for (const fish of state.largeFish) fish.update(state, simDt);
 
       consumeInteractions();
       reproduction();
@@ -581,6 +669,13 @@
     document.getElementById('pause').addEventListener('click', (e) => {
       state.paused = !state.paused;
       e.target.textContent = state.paused ? 'Resume' : 'Pause';
+    });
+
+    document.getElementById('toggle-panel').addEventListener('click', (e) => {
+      document.body.classList.toggle('panel-hidden');
+      const hidden = document.body.classList.contains('panel-hidden');
+      e.target.textContent = hidden ? 'Show controls' : 'Hide controls';
+      setTimeout(resize, 280);
     });
 
     init();
